@@ -1,42 +1,47 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { runInit } from "./commands/init";
-import { runReplace } from "./commands/replace";
-import { runTranslateCommand } from "./commands/translate";
+import { runInit } from "./cli/init";
+import { runReplace } from "./cli/replace";
+import { runTranslateCommand } from "./cli/translate";
+
+// SDK exports – make them available for import in RN apps
+export {
+  useT,
+  setLocale,
+  getCurrentLocale,
+  getTranslations,
+  getAvailableLocales,
+} from "./sdk";
 
 const program = new Command();
 
 program
-  .name("localise")
-  .description("AI-powered React Native localisation CLI")
-  .version("0.1.0");
+  .name("localise-ai")
+  .description("AI-powered localisation CLI for React Native")
+  .version("1.0.0");
 
-// localise init
 program
   .command("init")
   .description("Initialise the localisation config")
   .action(runInit);
 
-// localise replace
 program
   .command("replace")
-  .description("Extract and replace hardcoded strings with `t()`")
-  .action(() => {
-    runReplace();
-  });
+  .description("Extract and replace hardcoded strings with t()")
+  .option("--dry-run", "Preview changes without writing to files")
+  .action(runReplace);
 
-// localise translate --lang fr,de
 program
   .command("translate")
-  .description("Translate extracted strings")
-  .requiredOption(
-    "--lang <languages>",
-    "Comma-separated list of target languages"
-  )
+  .description("Translate strings in your translations folder")
+  .requiredOption("--lang <languages>", "Comma-separated list of languages")
   .option("--dry-run", "Preview translation changes without saving")
-  .action((options) => {
-    runTranslateCommand(options.lang.split(","), options.dryRun);
+  .action((opts) => {
+    const langs = opts.lang.split(",").map((l: string) => l.trim());
+    runTranslateCommand(langs, opts.dryRun);
   });
 
-program.parse(process.argv);
+if (require.main === module) {
+  program.parse(process.argv);
+}

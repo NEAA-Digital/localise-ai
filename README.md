@@ -18,19 +18,21 @@ npx localise-ai translate --lang fr,de
 
 ## 🛠 What It Does
 
-✅ Extracts text nodes and template literals from JSX\
-✅ Automatically replaces them with t("key")\
-✅ Saves all extracted text to translations/en.json\
-✅ Translates keys to any language using Google Translate\
-✅ Adds missing imports for t automatically\
-✅ Skips files/folders in .localiseignore\
-✅ Handles template variables like Hello, {{name}}\
-✅ Detects and rewrites basic plural patterns like item(s)\
-✅ Works great in CI with --dry-run support\
+✅ Extracts hardcoded strings from JSX (including JSXText, JSX attributes, ternaries)\
+✅ Replaces them with `t("key")`\
+✅ Automatically adds `const t = useT() and import { useT } from "localise-ai"`\
+✅ Saves all strings to `translations/en.json`\
+✅ Translates into any language using a local dev-friendly engine\
+✅ Updates `initLocalisation("en", { en, fr, ... })` with new imports\
+✅ Handles ICU-style plurals like `item(s)` and ternaries\
+✅ Supports `{{placeholders}}` in strings\
+✅ Fully repeatable CLI – safely run multiple times\
+✅ Works great in CI with `--dry-run` mode\
+✅ Skips files/folders in `.localiseignore`\
 
 ## 🧪 Commands
 
-### localise-ai init
+### -> localise-ai init
 
 Initialise project (placeholder for future config setup)
 
@@ -38,29 +40,35 @@ Initialise project (placeholder for future config setup)
 localise-ai init
 ```
 
-### localise-ai replace
+### -> localise-ai replace
 
-Extracts text from your src/ folder, saves it to translations/en.json, and replaces hardcoded strings in-place with t("key").
+Scans your project for hardcoded strings, extracts them into translations/en.json, and replaces them with t("key").
 
-Supports template literals and variable interpolation.
+Adds `import { useT } from "localise-ai" and const t = useT();` if missing.
 
-Automatically adds missing t function from localise-ai-sdk.
+Automatically detects pluralisation (e.g. ternaries using count).
 
-Respects .localiseignore to skip specific files or folders.
+Supports JSXText, string attributes, and ternary strings.
+
+Skips files/folders in `.localiseignore`.
 
 ```
 localise-ai replace
 ```
 
-### localise-ai translate --lang <languages> [--dry-run]
+### -> localise-ai translate --lang <languages> [--dry-run]
 
-Translates all keys in translations/en.json to the specified language(s).
+Translates missing keys in `translations/en.json` into the specified languages.
+
+Smartly skips already-translated keys.
+
+Automatically adds new imports and updates `initLocalisation(...)` in your app root.
+
+Safe to run multiple times.
 
 ```
 localise-ai translate --lang fr,de
 ```
-
-You can run this multiple times — only untranslated strings will be sent.
 
 Dry Run Example:
 
@@ -68,45 +76,91 @@ Dry Run Example:
 localise-ai translate --lang es --dry-run
 ```
 
-## 📁 File Output
+## 📁 Output Structure
 
-translations/en.json – base English strings
-
-translations/fr.json, de.json, etc. – translated output
+```
+translations/
+├── en.json      # Source language
+├── fr.json      # French translation
+├── de.json      # German translation
+```
 
 ## 📂 .localiseignore
 
-Create a .localiseignore file to exclude paths during replacement:
+Create a `.localiseignore` file to exclude paths during replacement:
 
-src/commands/\
+```
+src/cli/\
 src/utils/
-
-## 🚧 Upcoming Features
-
-Free tier limits and paid usage tracking
-
-Fully-featured SDK with runtime t() handling
-
-Locale switching and pluralisation formatting
-
-CLI login & usage-based billing system
+```
 
 ## 📦 SDK
 
-When you import the SDK:
+At runtime, use the SDK to handle all translations and locale switching.
+
+### -> useT()
+
+Use this inside components to access the translation function reactively:
 
 ```
-import { t } from "localise-ai";
+import { useT } from "localise-ai";
+
+const t = useT();
+
+t("home.welcome"); // → "Welcome"
+t("home.welcome", { name: "Alice" }); // → "Welcome, Alice"
 ```
 
-You’ll get a lightweight t() function to handle runtime translation lookup and variable interpolation.
+Automatically re-renders when locale changes
+
+Supports placeholders (e.g. `Hello, {{name}}`)
+
+Supports ICU plural rules (e.g. `{count, plural, one {...} other {...}}`)
+
+### -> setLocale(locale: string)
+
+Globally switch the current locale at runtime:
+
+```
+import { setLocale } from "localise-ai";
+
+setLocale("fr"); // Switch to French
+```
+
+All components using `useT()` will re-render with the new locale.
+
+### -> initLocalisation(defaultLocale, translationsMap)
+
+Used once at app startup to initialise localisation:
+
+```
+import en from "../translations/en.json";
+import fr from "../translations/fr.json";
+import { initLocalisation } from "localise-ai";
+
+initLocalisation("en", { en, fr });
+```
+
+The CLI injects this automatically into your root layout if it's missing.
+
+### -> getCurrentLocale() & getAvailableLocales()
+
+If you want to display or persist language settings:
+
+```
+import { getCurrentLocale, getAvailableLocales } from "localise-ai";
+
+const current = getCurrentLocale();     // e.g. "en"
+const options = getAvailableLocales();  // e.g. ["en", "fr", "de"]
+```
+
+`getAvailableLocales()` returns the keys passed into `initLocalisation(...)`, based on your available `translations/*.json` files.
 
 ## 👷 Status
 
-This is an active WIP. Expect rapid iteration over the next few weeks.
-Contributions and feedback welcome once live.
+Localise-AI is in active development. Feedback welcome..
 
-## Licence
+## 🪪 Licence
 
 MIT
 
