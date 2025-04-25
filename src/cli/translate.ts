@@ -4,9 +4,15 @@ import * as babel from "@babel/core";
 import traverse from "@babel/traverse";
 import generate from "@babel/generator";
 import * as t from "@babel/types";
+import axios from "axios";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const SOURCE_LANG = "en";
 const TRANSLATIONS_DIR = "translations";
+const CONFIG_FILE = "localise.config.js";
+const API_BASE = process.env.LOCALISE_API_BASE || "http://localhost:3000/api";
 
 function cleanICUPlural(value: string): string {
   if (!value.includes("plural")) return value;
@@ -18,13 +24,6 @@ function cleanICUPlural(value: string): string {
     .replace(/\b(Count|count)\b/, "count")
     .replace(/\(\s?s\s?\)/g, "")
     .replace(/item\s*\(s\)/gi, "item(s)");
-}
-
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-
-// Simulated translation function for dev mode
-async function fakeTranslate(text: string, to: string): Promise<string> {
-  return `[${to.toUpperCase()}] ${text}`;
 }
 
 function findRootComponent(): string | null {
@@ -58,7 +57,6 @@ function updateInitLocalisationCall(langs: string[], dryRun: boolean) {
 
   const importMap = new Map<string, t.ImportDeclaration>();
 
-  // Track existing translation imports
   ast.program.body.forEach((node) => {
     if (
       t.isImportDeclaration(node) &&
@@ -70,8 +68,6 @@ function updateInitLocalisationCall(langs: string[], dryRun: boolean) {
   });
 
   const toAdd = langs.filter((lang) => !importMap.has(lang));
-
-  // Add any new import declarations
   for (const lang of toAdd) {
     const importDecl = t.importDeclaration(
       [t.importDefaultSpecifier(t.identifier(lang))],
@@ -80,12 +76,10 @@ function updateInitLocalisationCall(langs: string[], dryRun: boolean) {
     importMap.set(lang, importDecl);
   }
 
-  // Sort all translation imports alphabetically by path
   const sortedImports = Array.from(importMap.entries())
     .sort((a, b) => a[1].source.value.localeCompare(b[1].source.value))
     .map(([, decl]) => decl);
 
-  // Remove all previous translation imports from AST
   ast.program.body = ast.program.body.filter(
     (node) =>
       !(
@@ -94,13 +88,11 @@ function updateInitLocalisationCall(langs: string[], dryRun: boolean) {
       )
   );
 
-  // Insert sorted translation imports after general imports
   const firstNonImport = ast.program.body.findIndex(
     (n) => !t.isImportDeclaration(n)
   );
   ast.program.body.splice(firstNonImport, 0, ...sortedImports);
 
-  // Add to initLocalisation object
   traverse(ast, {
     CallExpression(path) {
       if (
@@ -141,10 +133,29 @@ function updateInitLocalisationCall(langs: string[], dryRun: boolean) {
   }
 }
 
+function getConfig(): { apiKey: string; projectKey: string } | null {
+  if (!fs.existsSync(CONFIG_FILE)) return null;
+  try {
+    const config = require(path.resolve(CONFIG_FILE));
+    return {
+      apiKey: config.apiKey,
+      projectKey: config.projectKey,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function runTranslateCommand(
   targetLangs: string[],
   dryRun = false
 ) {
+  const config = getConfig();
+  if (!config || !config.apiKey || !config.projectKey) {
+    console.log("❌ Missing API or project key. Run `localise-ai init` first.");
+    return;
+  }
+
   const sourcePath = path.join(TRANSLATIONS_DIR, `${SOURCE_LANG}.json`);
   if (!fs.existsSync(sourcePath)) {
     console.log(`❌ No ${SOURCE_LANG}.json file found.`);
@@ -160,47 +171,52 @@ export async function runTranslateCommand(
       ? fs.readJSONSync(targetPath)
       : {};
 
-    const untranslatedKeys = Object.keys(sourceData).filter(
-      (key) => !targetData[key]
-    );
+    const untranslatedKeys: Record<string, string> = {};
+    for (const key of Object.keys(sourceData)) {
+      if (!targetData[key]) {
+        untranslatedKeys[key] = sourceData[key];
+      }
+    }
 
-    if (untranslatedKeys.length === 0) {
+    if (Object.keys(untranslatedKeys).length === 0) {
       console.log(`ℹ️ No new strings to translate for ${lang}`);
       continue;
     }
 
     if (dryRun) {
       console.log(
-        `🧪 Would translate ${untranslatedKeys.length} string(s) to ${lang}`
+        `🧪 Would translate ${Object.keys(untranslatedKeys).length} string(s) to ${lang}`
       );
       continue;
     }
 
-    let translatedCount = 0;
+    try {
+      const response = await axios.post(`${API_BASE}/translate`, {
+        apiKey: config.apiKey,
+        projectKey: config.projectKey,
+        fromLang: SOURCE_LANG,
+        toLang: lang,
+        keys: untranslatedKeys,
+      });
 
-    for (const key of untranslatedKeys) {
-      try {
-        await delay(150);
-        const result = await fakeTranslate(sourceData[key], lang);
-        const cleaned = cleanICUPlural(result);
-        targetData[key] = cleaned;
-        translatedCount++;
-      } catch (err: any) {
-        console.error(
-          `🔴 Failed to translate '${key}' to '${lang}':`,
-          err.message
+      const translated = response.data?.translated as Record<string, string>;
+      if (translated && typeof translated === "object") {
+        for (const [key, val] of Object.entries(translated)) {
+          const cleaned = cleanICUPlural(val);
+          targetData[key] = cleaned;
+        }
+
+        fs.writeJSONSync(targetPath, targetData, { spaces: 2 });
+        updatedLangs.push(lang);
+        console.log(
+          `✅ Translated ${Object.keys(translated).length} string(s) to ${lang}`
         );
+      } else {
+        console.warn(`⚠️ No translations returned for ${lang}`);
       }
+    } catch (err: any) {
+      console.error(`🔴 Error translating to ${lang}:`, err.message);
     }
-
-    fs.writeJSONSync(targetPath, targetData, { spaces: 2 });
-    updatedLangs.push(lang);
-
-    console.log(
-      translatedCount > 0
-        ? `✅ ${translatedCount} new string(s) translated to ${lang}`
-        : `ℹ️ No new strings to translate for ${lang}`
-    );
   }
 
   if (updatedLangs.length && !dryRun) {

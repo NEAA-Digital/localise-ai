@@ -40,6 +40,8 @@
     "axios": "^1.8.4",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
     "fs-extra": "^11.3.0",
     "glob": "^11.0.1",
     "minimatch": "^10.0.1"
@@ -56,6 +58,7 @@
     "@types/babel__core": "^7.20.5",
     "@types/babel__generator": "^7.27.0",
     "@types/babel__traverse": "^7.20.7",
+    "@types/cors": "^2.8.17",
     "@types/fs-extra": "^11.0.4",
     "@types/glob": "^8.1.0",
     "@types/node": "^22.14.0",
