@@ -138,4 +138,3 @@ dist
 .env
 
 localise.config.js
-dist/

@@ -5,14 +5,11 @@ import traverse from "@babel/traverse";
 import generate from "@babel/generator";
 import * as t from "@babel/types";
 import axios from "axios";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const SOURCE_LANG = "en";
 const TRANSLATIONS_DIR = "translations";
 const CONFIG_FILE = "localise.config.js";
-const API_BASE = process.env.LOCALISE_API_BASE || "http://localhost:3000/api";
+const API_BASE = "http://194.163.167.28:3000/api";
 
 function cleanICUPlural(value: string): string {
   if (!value.includes("plural")) return value;
@@ -192,6 +189,7 @@ export async function runTranslateCommand(
 
     try {
       const response = await axios.post(`${API_BASE}/translate`, {
+        // ✅ Correct endpoint with /api
         apiKey: config.apiKey,
         projectKey: config.projectKey,
         fromLang: SOURCE_LANG,

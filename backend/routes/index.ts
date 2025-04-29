@@ -1,6 +1,5 @@
 import express, { Router, Request, Response } from "express";
 import crypto from "crypto";
-import Project from "../models/project";
 import axios from "axios";
 
 const router: Router = express.Router();
@@ -13,29 +12,18 @@ router.post("/register", async (req: Request, res: Response): Promise<any> => {
     return res.status(400).json({ error: "Missing fingerprint" });
   }
 
+  // Fake API key and project key for testing
+  const apiKey = crypto.randomBytes(32).toString("hex");
   const projectKey = crypto
     .createHash("sha256")
     .update(fingerprint)
     .digest("hex");
 
-  const apiKey = crypto.randomBytes(32).toString("hex");
-
-  try {
-    const existing = await Project.findOne({ projectKey });
-    if (existing) {
-      return res.json({ key: existing.apiKey });
-    }
-
-    const newProject = new Project({ projectKey, apiKey });
-    await newProject.save();
-
-    res.json({ key: apiKey });
-  } catch (err: any) {
-    console.error("Registration error:", err.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
+  // Simulate successful response
+  res.json({ apiKey, projectKey });
 });
 
+// Helper: Call LibreTranslate
 const translateText = async (
   text: string,
   toLang: string,
@@ -43,7 +31,7 @@ const translateText = async (
 ): Promise<string> => {
   try {
     const response = await axios.post(
-      "http://194.163.167.28:5000/translate",
+      "http://194.163.167.28:5000/translate", // ⚡ CORRECT LibreTranslate server!
       {
         q: text,
         source: fromLang,
@@ -60,11 +48,11 @@ const translateText = async (
     return response.data?.translatedText ?? "";
   } catch (err: any) {
     console.error("LibreTranslate error:", err.message);
-    return text; // Fallback to original if translation fails
+    return text; // fallback
   }
 };
 
-// Translate endpoint
+// Translate endpoint (no DB)
 router.post("/translate", async (req: Request, res: Response): Promise<any> => {
   const { apiKey, fromLang, toLang, keys } = req.body;
 
@@ -73,18 +61,16 @@ router.post("/translate", async (req: Request, res: Response): Promise<any> => {
   }
 
   try {
-    const project = await Project.findOne({ apiKey });
-    if (!project) {
-      return res.status(401).json({ error: "Invalid API key" });
-    }
+    // Fake project check for testing
+    const fakeProject = { usage: 0, save: async () => {} };
 
     const translated: Record<string, string> = {};
     for (const [key, value] of Object.entries(keys)) {
       translated[key] = await translateText(value as string, toLang, fromLang);
     }
 
-    project.usage += Object.keys(keys).length;
-    await project.save();
+    fakeProject.usage += Object.keys(keys).length;
+    await fakeProject.save();
 
     res.json({ translated });
   } catch (err: any) {
